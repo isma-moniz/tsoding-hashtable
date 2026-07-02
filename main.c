@@ -18,6 +18,7 @@ void log_elapsed_time(struct timespec begin, struct timespec end) {
 typedef struct {
 	const char* key;
 	size_t value;
+	uint8_t occupied;
 } freq_KV;
 
 typedef struct {
@@ -31,11 +32,11 @@ struct parsed_file {
 	size_t len;
 };
 
-uint32_t hash(uint32_t* buf, size_t size)
+uint32_t hash(uint8_t* buf, size_t size)
 {
 	uint32_t hash = 0;
 	for (size_t i = 0; i < size; ++i) {
-		hash += buf[i]; // tsoding casted this to uint32_t, idk why so i won't (yet)
+		hash  = hash*13 + buf[i]; // tsoding casted this to uint32_t, idk why so i won't (yet)
 	}
 	return hash;
 }
@@ -113,26 +114,18 @@ int read_entire_file(const char *path, struct parsed_file* p_file_struct)
 	return 0;
 }
 
-int main(void)
+int naive_solution(char* buf)
 {
-	const char* file_path = "shakespeare.txt";
-	struct parsed_file pfile = {0};
-	if (read_entire_file(file_path, &pfile) < 0) {
-		printf("Error reading file.\n");
-		return -1;
-	}
-	printf("Size of file: %lu\n", pfile.len);
-
 	freq_KVs freqs = {0};
 
 	struct timespec begin = {0};
 	struct timespec end = {0};
 	clock_gettime(CLOCK_MONOTONIC, &begin);
 
-	char* token = strtok(pfile.buf, " \n");
+	char* token = strtok(buf, " \n");
 	if (!token) return -1;
 	size_t count = 1;
-	append_KV(&freqs, ((freq_KV){
+	append_KV(&freqs, ((freq_KV) {
 				.key = token,
 				.value = 1
 				}));
@@ -159,8 +152,52 @@ int main(void)
 	for (size_t i = 0; i < 10 && i < freqs.count; ++i) {
 		printf("%s\t%lu\n", freqs.items[i].key, freqs.items[i].value);
 	}
+	log_elapsed_time(begin, end);
+	
+	free (freqs.items); //TODO: check leak correctness
+	return 0;
+}
+
+int main(void)
+{
+	const char* file_path = "shakespeare.txt";
+	struct parsed_file pfile = {0};
+	if (read_entire_file(file_path, &pfile) < 0) {
+		printf("Error reading file.\n");
+		return -1;
+	}
+	printf("Size of file: %lu\n", pfile.len);
+
+	size_t n = 1000;
+	freq_KV *slots = malloc(sizeof(freq_KV) * n);
+	memset(slots, 0, sizeof(freq_KV) * n);
+
+	char* token = strtok(pfile.buf, " \n");
+	if (!token) return -1;
+	uint32_t h = hash((uint8_t*)token, strlen(token))%n;
+	printf("  %s\t0x%08X\n", token, h);
+	size_t count = 1;
+	for (; count < 1000 && count > 0; ++count) {
+		token = strtok(NULL, " \n");
+		if (!token) break;
+		uint32_t h = hash((uint8_t*)token, strlen(token))%n;
+		printf("  %s\t0x%08X\n", token, h);
+
+		if (slots[h].occupied) {
+			if (!strcmp(slots[h].key, token)) {
+				slots[h].value += 1;
+			} else {
+				printf("Collided 0x%08X at %lu", h, count);
+				break;
+			}
+		} else {
+			slots[h].value = 1;
+			slots[h].occupied = 1;
+			slots[h].key = token;
+		}
+	}
+	// naive_solution(pfile.buf);
 
 	free(pfile.buf);
-	log_elapsed_time(begin, end);
 	return 0;
 }
