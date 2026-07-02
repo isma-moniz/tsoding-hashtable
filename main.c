@@ -168,36 +168,53 @@ int main(void)
 	}
 	printf("Size of file: %lu\n", pfile.len);
 
-	size_t n = 1000;
+	size_t n = 100;
+	size_t m = 0; // nr of occupied slots
 	freq_KV *slots = malloc(sizeof(freq_KV) * n);
 	memset(slots, 0, sizeof(freq_KV) * n);
 
 	char* token = strtok(pfile.buf, " \n");
 	if (!token) return -1;
 	uint32_t h = hash((uint8_t*)token, strlen(token))%n;
-	printf("  %s\t0x%08X\n", token, h);
+	printf("  0x%08X\t%s\n", h, token);
 	size_t count = 1;
-	for (; count < 1000 && count > 0; ++count) {
+	for (; count < 100 && count > 0; ++count) {
 		token = strtok(NULL, " \n");
 		if (!token) break;
 		uint32_t h = hash((uint8_t*)token, strlen(token))%n;
-		printf("  %s\t0x%08X\n", token, h);
+		printf("  0x%08X\t%s\n", h, token);
 
-		if (slots[h].occupied) {
-			if (!strcmp(slots[h].key, token)) {
-				slots[h].value += 1;
-			} else {
-				printf("Collided 0x%08X at %lu", h, count);
-				break;
+		for (size_t i = 0; i < n && slots[h].occupied && strcmp(slots[h].key, token); ++i) { // while slot occupied and not by equal key 
+			h = (h + 1) % n; // linear probing
+		}
+
+		if (slots[h].occupied) { // found key
+			if (strcmp(slots[h].key, token)) {
+				printf("Table overflow!\n");
+				free(slots);
+				free(pfile.buf);
+				return -1;
 			}
+			slots[h].value += 1;
 		} else {
 			slots[h].value = 1;
 			slots[h].occupied = 1;
 			slots[h].key = token;
+			m += 1;
+		}
+	}
+	
+	printf("Slots:\n");
+	for (size_t i = 0; i < n; ++i) {
+		if (slots[i].occupied) {
+			printf("%lu\t%s\n", slots[i].value, slots[i].key);
+		} else {
+			printf("Free: %lu\n", i);
 		}
 	}
 	// naive_solution(pfile.buf);
 
 	free(pfile.buf);
+	free(slots);
 	return 0;
 }
